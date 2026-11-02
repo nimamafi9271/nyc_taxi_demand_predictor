@@ -33,14 +33,14 @@ def validate_raw_data(
     """
     # keep only rides for this month
     this_month_start= f'{year}-{month:02d}-01'
-    this_month_end= f'{year}-{month:02d}-01' if month < 12 else f'{year+1}-01-01'
+    next_month_start= f'{year}-{month+1:02d}-01' if month < 12 else f'{year+1}-01-01'
     rides= rides[rides.pickup_datetime >= this_month_start]
-    rides= rides[rides.pickup_datetime < this_month_end]
+    rides= rides[rides.pickup_datetime < next_month_start]
 
     return rides
 
 
-# The function that processes several files at once (downloads and validates data files for several months)
+# The function that processes several files at once (downloads and validates raw data files for several months)
 def load_raw_data(
         year: int,
         months: Optional[List[int]]= None,
@@ -82,7 +82,7 @@ def load_raw_data(
         }, inplace= True)
 
         # validate the file
-        rides_one_month= validate_raw_data(rides_one_month, year, month)
+        rides_one_month = validate_raw_data(rides_one_month, year, month)
 
         # append to existing data
         rides= pd.concat([rides, rides_one_month])
@@ -130,7 +130,7 @@ def transform_raw_data_into_ts_data(
     # add rows for (locations, pickup_hours) with 0 rides
     agg_rides_all_slots= add_missing_slots(agg_rides)
 
-    return agg_rides
+    return agg_rides_all_slots
 
 
 def get_cutoff_indices_features_and_targets(
