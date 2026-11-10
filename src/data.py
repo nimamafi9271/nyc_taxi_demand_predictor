@@ -98,7 +98,7 @@ def add_missing_slots(agg_rides: pd.DataFrame) -> pd.DataFrame:
     full_range=pd.date_range(agg_rides['pickup_hour'].min(), 
                              agg_rides['pickup_hour'].max(), 
                              freq='h')
-    output=pd.DataFrame()
+    output_parts = []
 
     for location_id in tqdm(location_ids):
 
@@ -114,21 +114,40 @@ def add_missing_slots(agg_rides: pd.DataFrame) -> pd.DataFrame:
         agg_rides_i['pickup_location_id']=location_id
 
         # add back 'location_id' columnss
-        output=pd.concat([output, agg_rides_i])
+        output_parts.append(agg_rides_i)
+    output = pd.concat(output_parts)
     output=output.reset_index().rename(columns={'index':'pickup_hour'})
     return output
 
 def transform_raw_data_into_ts_data(
-        rides: pd.DataFrame
+        rides: pd.DataFrame,
+        chunk_size: int = 500_000, 
 ) -> pd.DataFrame:
 
-    # sum rides per location and pickup_hour
-    rides['pickup_hour']= rides['pickup_datetime'].dt.floor('h')
-    agg_rides=rides.groupby(['pickup_hour','pickup_location_id']).size().reset_index()
-    agg_rides.rename(columns={0:'rides'}, inplace=True)
+    # aggregate raw rides in smaller chunks
+    partial_counts = []
 
-    # add rows for (locations, pickup_hours) with 0 rides
-    agg_rides_all_slots= add_missing_slots(agg_rides)
+    for start in range(0, len(rides), chunk_size):
+        batch = rides.iloc[start:start + chunk_size].copy()
+
+        batch['pickup_hour'] = batch['pickup_datetime'].dt.floor('h')
+
+        counts = batch.groupby(
+            ['pickup_hour', 'pickup_location_id']
+        ).size()
+
+        partial_counts.append(counts)
+
+    # combine hourly counts from all chunks
+    agg_rides = (
+        pd.concat(partial_counts)
+        .groupby(level=['pickup_hour', 'pickup_location_id'])
+        .sum()
+        .reset_index(name='rides')
+    )
+
+    # add rows for missing location-hour combinations
+    agg_rides_all_slots = add_missing_slots(agg_rides)
 
     return agg_rides_all_slots
 
